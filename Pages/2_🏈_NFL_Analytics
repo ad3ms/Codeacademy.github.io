@@ -1,0 +1,87 @@
+# pages/2_🏈_NFL_Analytics.py
+from core_engine import (
+    american_to_decimal,
+    calculate_kelly,
+    decimal_to_american,
+    fetch_live_odds,
+    strip_vig,
+)
+import pandas as pd
+import streamlit as st
+
+st.set_page_config(page_title="NFL Analytics", page_icon="🏈", layout="wide")
+st.title("🏈 NFL Quantitative Engine")
+
+bankroll = st.session_state.get("bankroll", 1000.0)
+
+tab_scanner, tab_key_nums, tab_devig = st.tabs(
+    ["📊 Spread & Total Scanner", "🎯 Key Numbers Valuation", "🧮 De-Vig & Kelly"]
+)
+
+with tab_scanner:
+    st.subheader("NFL Point Spread Comparison")
+
+    demo_nfl = [
+        {
+            "Matchup": "KC Chiefs @ BAL Ravens",
+            "DK Spread": "+3.0 (-105) / -3.0 (-115)",
+            "FD Spread": "+3.5 (-125) / -3.5 (+105)",
+            "MGM Spread": "+3.0 (+100) / -3.0 (-120)",
+        },
+        {
+            "Matchup": "DET Lions @ GB Packers",
+            "DK Spread": "+1.5 (-110) / -1.5 (-110)",
+            "FD Spread": "+2.0 (-115) / -2.0 (-105)",
+            "MGM Spread": "+1.5 (-108) / -1.5 (-112)",
+        },
+    ]
+    st.dataframe(pd.DataFrame(demo_nfl), use_container_width=True)
+
+with tab_key_nums:
+    st.subheader("NFL Key Number Edge Estimator")
+    st.caption(
+        "Historical frequency of NFL final score margins (since 2015):"
+    )
+
+    key_margins = pd.DataFrame(
+        [
+            {"Margin": "3 points", "Historical Frequency": "14.8%"},
+            {"Margin": "7 points", "Historical Frequency": "9.4%"},
+            {"Margin": "6 points", "Historical Frequency": "6.1%"},
+            {"Margin": "10 points", "Historical Frequency": "5.7%"},
+            {"Margin": "4 points", "Historical Frequency": "5.3%"},
+        ]
+    )
+    st.table(key_margins)
+
+    st.markdown("""
+    **Rule of Thumb:**
+    * Moving across **3** (e.g. from `+2.5` to `+3.5`) is worth roughly **25-30 cents** of juice in American odds.
+    * Moving across **7** (e.g. from `+6.5` to `+7.5`) is worth roughly **15-20 cents** of juice.
+    * Moving across non-key numbers (like `+8.5` to `+9.5`) is typically worth only **5-8 cents**.
+    """)
+
+with tab_devig:
+    st.subheader("NFL Point Spread De-Vig")
+    c1, c2 = st.columns(2)
+    with c1:
+        underdog = st.number_input("Underdog Spread Odds", value=-110, step=5)
+    with c2:
+        favorite = st.number_input("Favorite Spread Odds", value=-110, step=5)
+
+    vig, p_dog, p_fav = strip_vig(
+        american_to_decimal(underdog), american_to_decimal(favorite)
+    )
+    st.metric("Spread Market Vig", f"{vig:.2f}%")
+
+    c_ev1, c_ev2 = st.columns(2)
+    c_ev1.metric("Fair Underdog Cover %", f"{p_dog*100:.2f}%")
+    c_ev2.metric("Fair Favorite Cover %", f"{p_fav*100:.2f}%")
+
+    st.divider()
+    soft_dog = st.number_input("Offered Odds on Soft Book", value=+100, step=5)
+    ev, stake = calculate_kelly(
+        bankroll, p_dog, american_to_decimal(soft_dog), fraction=0.25
+    )
+    st.metric("Expected Value (EV%)", f"{ev:+.2f}%")
+    st.metric("Suggested Stake (Quarter Kelly)", f"${stake:.2f}")

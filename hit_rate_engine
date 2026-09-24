@@ -1,0 +1,62 @@
+from dataclasses import dataclass
+import pandas as pd
+
+
+def american_to_implied(odds: float) -> float:
+    if odds > 0:
+        return 100.0 / (odds + 100.0)
+    else:
+        return abs(odds) / (abs(odds) + 100.0)
+
+
+@dataclass
+class TrendResult:
+    player_or_team: str
+    stat_market: str
+    line: float
+    last_10_hits: int
+    hit_rate_pct: float
+    offered_odds: int
+    implied_odds_pct: float
+    edge_pct: float
+    is_highlighted: bool
+
+
+def analyze_trend(
+    entity: str,
+    market: str,
+    line: float,
+    recent_game_log: list[float],
+    offered_odds: int,
+    threshold: float = 0.75,
+) -> TrendResult:
+    """Evaluates the last 10 games against a target stat line and calculates the pricing edge."""
+    # Take the last 10 games (or whatever subset is available)
+    last_10 = recent_game_log[-10:]
+    sample_size = len(last_10)
+
+    if sample_size == 0:
+        return None
+
+    # Count how many times the stat went OVER the target line
+    hits = sum(1 for val in last_10 if val > line)
+    hit_rate = hits / sample_size
+
+    # Calculate bookmaker's implied hurdle
+    implied_prob = american_to_implied(offered_odds)
+
+    # Edge = Empirical Hit Rate - Sportsbook Implied Probability
+    edge = (hit_rate - implied_prob) * 100.0
+    is_highlighted = hit_rate >= threshold
+
+    return TrendResult(
+        player_or_team=entity,
+        stat_market=market,
+        line=line,
+        last_10_hits=hits,
+        hit_rate_pct=hit_rate * 100.0,
+        offered_odds=offered_odds,
+        implied_odds_pct=implied_prob * 100.0,
+        edge_pct=edge,
+        is_highlighted=is_highlighted,
+    )

@@ -1,0 +1,132 @@
+# pages/3_🔥_Trends_and_Hit_Rates.py
+import pandas as pd
+import streamlit as st
+
+st.set_page_config(page_title="Hit Rate & Trends", page_icon="🔥", layout="wide")
+st.title("🔥 L10 Hit Rate & Trend Finder")
+st.caption(
+    "Screens player props and game totals where an outcome hit ≥ 75% over the last 10 games."
+)
+
+# User controls for filters
+c1, c2 = st.columns(2)
+with c1:
+    sport_filter = st.selectbox("Sport", ["MLB", "NFL"])
+with c2:
+    min_hit_rate = (
+        st.slider("Minimum Hit Rate %", min_value=60, max_value=90, value=75, step=5)
+        / 100.0
+    )
+
+# Sample Dataset mimicking MLB strikeout/hit props & NFL passing/rushing props
+mock_props_data = [
+    {
+        "Sport": "MLB",
+        "Target": "Shohei Ohtani",
+        "Market": "Over 1.5 Total Bases",
+        "Line": 1.5,
+        "L10 Log": [2, 4, 0, 3, 2, 1, 3, 2, 4, 2],  # 8 of 10 (80%)
+        "Offered Odds": -125,
+    },
+    {
+        "Sport": "MLB",
+        "Target": "Tarik Skubal",
+        "Market": "Over 6.5 Strikeouts",
+        "Line": 6.5,
+        "L10 Log": [7, 8, 9, 5, 8, 7, 6, 8, 9, 8],  # 8 of 10 (80%)
+        "Offered Odds": -140,
+    },
+    {
+        "Sport": "MLB",
+        "Target": "Aaron Judge",
+        "Market": "Over 0.5 Home Runs",
+        "Line": 0.5,
+        "L10 Log": [0, 1, 0, 0, 1, 0, 1, 0, 0, 0],  # 3 of 10 (30%)
+        "Offered Odds": +215,
+    },
+    {
+        "Sport": "NFL",
+        "Target": "Patrick Mahomes",
+        "Market": "Over 265.5 Passing Yds",
+        "Line": 265.5,
+        "L10 Log": [272, 291, 240, 305, 280, 266, 310, 295, 220, 285],  # 8 of 10 (80%)
+        "Offered Odds": -115,
+    },
+    {
+        "Sport": "NFL",
+        "Target": "Christian McCaffrey",
+        "Market": "Over 75.5 Rushing Yds",
+        "Line": 75.5,
+        "L10 Log": [95, 84, 110, 62, 90, 105, 82, 79, 70, 88],  # 8 of 10 (80%)
+        "Offered Odds": -130,
+    },
+    {
+        "Sport": "NFL",
+        "Target": "Travis Kelce",
+        "Market": "Over 6.5 Receptions",
+        "Line": 6.5,
+        "L10 Log": [7, 5, 6, 8, 4, 7, 5, 6, 5, 7],  # 4 of 10 (40%)
+        "Offered Odds": +105,
+    },
+]
+
+# Process and evaluate
+rows = []
+for item in mock_props_data:
+    if item["Sport"] != sport_filter:
+        continue
+
+    log = item["L10 Log"]
+    line = item["Line"]
+    hits = sum(1 for x in log if x > line)
+    hit_rate = hits / len(log)
+
+    # Convert American to Implied %
+    odds = item["Offered Odds"]
+    implied_prob = (
+        (100.0 / (odds + 100.0)) if odds > 0 else (abs(odds) / (abs(odds) + 100.0))
+    )
+
+    edge = (hit_rate - implied_prob) * 100.0
+
+    rows.append(
+        {
+            "Player / Team": item["Target"],
+            "Prop Market": item["Market"],
+            "L10 Hits": f"{hits}/10",
+            "Hit Rate": hit_rate,
+            "Offered Odds": f"{odds:+d}",
+            "Implied Win %": f"{implied_prob * 100:.1f}%",
+            "Pricing Edge": edge,
+            "L10 Performance": " ".join([f"[{x}]" if x > line else f"{x}" for x in log]),
+        }
+    )
+
+df = pd.DataFrame(rows)
+
+
+# Highlight function for Streamlit table styling
+def highlight_streaks(row):
+    is_hot = row["Hit Rate"] >= min_hit_rate
+    has_edge = row["Pricing Edge"] > 0
+    if is_hot and has_edge:
+        return ["background-color: rgba(46, 204, 113, 0.25)"] * len(row)  # Soft green
+    elif is_hot:
+        return ["background-color: rgba(241, 196, 15, 0.25)"] * len(row)  # Soft yellow
+    return [""] * len(row)
+
+
+if not df.empty:
+    # Format hit rate as clean percentage string
+    df_display = df.copy()
+    styled_df = df_display.style.apply(highlight_streaks, axis=1).format(
+        {"Hit Rate": "{:.1%}", "Pricing Edge": "{:+.1f}%"}
+    )
+
+    st.dataframe(styled_df, use_container_width=True)
+    st.caption(
+        "🟩 **Green rows:** Hit rate ≥ threshold AND positive pricing edge against sportsbook odds.\n\n"
+        "🟨 **Yellow rows:** Hit rate ≥ threshold, but the sportsbook has already juiced the line (diminished edge)."
+    )
+else:
+    st.info("No props match the criteria.")
